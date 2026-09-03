@@ -23,3 +23,13 @@
 .mb-message-staff {
     border-left: 3px solid var(--bs-success, #198754);
 }
+
+.mb-unanswered-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--bs-danger, #dc3545);
+    margin-right: 4px;
+    vertical-align: middle;
+}

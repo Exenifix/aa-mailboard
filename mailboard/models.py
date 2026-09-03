@@ -102,6 +102,15 @@ class Ticket(models.Model):
         """Subject tag used to correlate eve mails with this ticket."""
         return f"[MB{self.pk}-{self.mail_key}]"
 
+    @property
+    def is_unanswered(self) -> bool:
+        """True if the newest message on the ticket is from the client."""
+        try:
+            newest = self.messages.latest("timestamp")
+        except TicketMessage.DoesNotExist:
+            return False
+        return newest.type == TicketMessage.TYPE_CLIENT
+
     def assign_to(self, user) -> None:
         self.assignee = user
         self.assigned_at = timezone.now()

@@ -102,6 +102,7 @@
                     " " +
                     esc(ticket.title) +
                     "</strong><span>" +
+                    (ticket.is_unanswered ? '<span id="mb-unanswered-dot" class="mb-unanswered-dot"></span>' : '') +
                     badges(ticket) +
                     "</span></div>" +
                     '<small class="text-muted">' +

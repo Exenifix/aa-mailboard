@@ -174,6 +174,7 @@ def _ticket_to_dict(ticket: Ticket) -> dict:
         "assignee": _user_display(ticket.assignee) if ticket.assignee else None,
         "assignee_id": ticket.assignee_id,
         "is_closed": ticket.is_closed,
+        "is_unanswered": ticket.is_unanswered,
         "source": ticket.source,
         "created_at": ticket.created_at.isoformat(),
         "updated_at": ticket.updated_at.isoformat(),

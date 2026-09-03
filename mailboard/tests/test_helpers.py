@@ -8,7 +8,7 @@ from ..helpers import (
     strip_mail_tag,
     truncate,
 )
-from ..models import ESI_MAIL_MAX_BODY, ESI_MAIL_MAX_SUBJECT, DiscordWebhook, TicketCategory
+from ..models import ESI_MAIL_MAX_BODY, ESI_MAIL_MAX_SUBJECT, DiscordWebhook, TicketCategory, TicketMessage
 from .utils import create_character, create_ticket_direct
 
 
@@ -57,7 +57,13 @@ class TestMailComposition(TestCase):
         self.assertLessEqual(len(subject), ESI_MAIL_MAX_SUBJECT)
 
     def test_mail_body_contains_tag_and_respects_limit(self):
-        body = build_mail_body(self.ticket, "y" * 20000)
+        # the latest message carries the ticket tag, which is echoed back to the
+        # client so a reply can be correlated to this ticket
+        self.ticket.messages.create(
+            type=TicketMessage.TYPE_STAFF,
+            content=f"Thanks! See {self.ticket.mail_tag} for reference.",
+        )
+        body = build_mail_body(self.ticket)
         self.assertIn(self.ticket.mail_tag, body)
         self.assertLessEqual(len(body), ESI_MAIL_MAX_BODY)
 
