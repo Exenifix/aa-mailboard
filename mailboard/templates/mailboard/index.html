@@ -1,0 +1,21 @@
+{% extends 'mailboard/base.html' %}
+{% load i18n %}
+
+{% block mailboard_content %}
+    <div class="card card-default">
+        <div class="card-body">
+            <h5 class="card-title">{% translate "Welcome to the Mail Board" %}</h5>
+            <p class="card-text">
+                {% translate "The Mail Board collects support requests submitted via the web interface and via eve mail, and lets staff members respond to them." %}
+            </p>
+            {% if perms.mailboard.board_owner %}
+                <p class="card-text">
+                    {% translate "As a board owner you can register a character whose mailbox will be used to receive and send ticket mails." %}
+                </p>
+                <a class="btn btn-primary" href="{% url 'mailboard:add_board_owner' %}">
+                    {% translate "Add Board Owner" %}
+                </a>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

@@ -1,0 +1,86 @@
+{% extends 'mailboard/base.html' %}
+{% load i18n %}
+{% load static %}
+
+{% block page_title %}{% translate "Dashboard" %}{% endblock %}
+
+{% block mailboard_content %}
+    <div id="mailboard-dashboard"
+         data-tickets-url="{% url 'mailboard:api_tickets' %}"
+         data-csrf="{{ csrf_token }}"
+         data-user-id="{{ request.user.pk }}">
+        <div class="row">
+            <div class="col-lg-5">
+                <div class="card card-default mb-3">
+                    <div class="card-body">
+                        <div class="row g-2 align-items-end">
+                            <div class="col">
+                                <label class="form-label" for="mb-filter-category">{% translate "Category" %}</label>
+                                <select class="form-select form-select-sm" id="mb-filter-category">
+                                    <option value="">{% translate "All" %}</option>
+                                    <option value="none">{% translate "Other" %}</option>
+                                    {% for category in categories %}
+                                        <option value="{{ category.pk }}">{{ category.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col">
+                                <label class="form-label" for="mb-filter-status">{% translate "Status" %}</label>
+                                <select class="form-select form-select-sm" id="mb-filter-status">
+                                    <option value="">{% translate "Any" %}</option>
+                                    <option value="open">{% translate "Open" %}</option>
+                                    <option value="closed">{% translate "Closed" %}</option>
+                                </select>
+                            </div>
+                            <div class="col-auto">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="mb-filter-all">
+                                    <label class="form-check-label" for="mb-filter-all">
+                                        {% translate "Show assigned/closed" %}
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="list-group" id="mb-ticket-list"></div>
+            </div>
+            <div class="col-lg-7">
+                <div id="mb-ticket-view" class="card card-default d-none">
+                    <div class="card-header">
+                        <span id="mb-ticket-title"></span>
+                        <span id="mb-ticket-badges" class="float-end"></span>
+                    </div>
+                    <div class="card-body">
+                        <div id="mb-ticket-meta" class="text-muted small mb-3"></div>
+                        <div id="mb-messages" class="mb-3"></div>
+                        <div class="mb-2">
+                            <textarea class="form-control" id="mb-reply-content" rows="4"
+                                      maxlength="9000"
+                                      placeholder="{% translate 'Write a reply… it will be sent to the client via eve mail.' %}"></textarea>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <div class="btn-group">
+                                <button class="btn btn-outline-danger" id="mb-btn-close">{% translate "Close" %}</button>
+                                <button class="btn btn-outline-warning" id="mb-btn-send-close">{% translate "Send and close" %}</button>
+                            </div>
+                            <button class="btn btn-primary" id="mb-btn-send">{% translate "Send" %}</button>
+                        </div>
+                        <div class="alert alert-danger mt-3 d-none" id="mb-error"></div>
+                    </div>
+                </div>
+                <div id="mb-ticket-placeholder" class="text-muted text-center py-5">
+                    {% translate "Select a ticket from the list to view it." %}
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'mailboard/css/mailboard.css' %}">
+{% endblock %}
+
+{% block extra_javascript %}
+    <script src="{% static 'mailboard/js/dashboard.js' %}" defer></script>
+{% endblock %}

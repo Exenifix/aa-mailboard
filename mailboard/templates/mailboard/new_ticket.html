@@ -1,0 +1,35 @@
+{% extends 'mailboard/base.html' %}
+{% load i18n %}
+
+{% block page_title %}{% translate "New Ticket" %}{% endblock %}
+
+{% block mailboard_content %}
+    <div class="card card-default">
+        <div class="card-body">
+            <h5 class="card-title">{% translate "Create a new ticket" %}</h5>
+            <form method="post" action="{% url 'mailboard:new_ticket' %}">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label class="form-label" for="id_title">{% translate "Title" %}</label>
+                    <input type="text" class="form-control" id="id_title" name="title"
+                           maxlength="255" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="id_category">{% translate "Category" %}</label>
+                    <select class="form-select" id="id_category" name="category">
+                        <option value="">{% translate "Other" %}</option>
+                        {% for category in categories %}
+                            <option value="{{ category.pk }}">{{ category.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="id_content">{% translate "Description" %}</label>
+                    <textarea class="form-control" id="id_content" name="content" rows="8"
+                              maxlength="{{ max_content_length }}" required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">{% translate "Create ticket" %}</button>
+            </form>
+        </div>
+    </div>
+{% endblock %}

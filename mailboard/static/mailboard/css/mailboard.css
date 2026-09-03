@@ -1,0 +1,25 @@
+/* Mail Board styles */
+
+#mb-messages {
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+.mb-portrait {
+    width: 24px;
+    height: 24px;
+    vertical-align: text-bottom;
+}
+
+.mb-message-content {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.mb-message-client {
+    border-left: 3px solid var(--bs-info, #0dcaf0);
+}
+
+.mb-message-staff {
+    border-left: 3px solid var(--bs-success, #198754);
+}

@@ -1,0 +1,75 @@
+[project]
+name = "mailboard"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Exenifix"}
+]
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "allianceauth (>=5.2.0,<6.0.0)",
+    "django-esi (>=9.10.0,<10.0.0)",
+    "requests (>=2.34.2,<3.0.0)",
+    "allianceauth-app-utils (>=1.33.2,<2.0.0)"
+]
+
+[tool.poetry]
+packages = [
+    {include = "mailboard"}
+]
+
+[tool.poetry.group.dev.dependencies]
+black = "^25.1.0"
+ruff = "^0.11.13"
+pre-commit = "^4.2.0"
+djlint = "^1.36.4"
+
+[tool.djlint]
+profile = "django"
+
+[tool.black]
+line-length = 120
+target-version = ["py313"]
+extend-exclude = "migrations"
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+exclude = [
+    "migrations"
+]
+
+[tool.ruff.lint]
+select = [
+    "F",
+    "E",
+    "W",
+    "I",
+    "N",
+    "UP",
+    "B",
+    "ASYNC",
+    "C4",
+    "PIE",
+    "T20",
+    "Q",
+    "RET",
+    "SIM",
+    "ARG",
+    "PTH",
+    "RUF"
+]
+ignore = [
+    "PIE796",
+    "B028",
+    "RUF018",
+    "N818",
+    "B905",
+    "RUF012"
+]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

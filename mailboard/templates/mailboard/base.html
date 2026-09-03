@@ -1,0 +1,54 @@
+{% extends 'allianceauth/base-bs5.html' %}
+{% load humanize %}
+{% load i18n %}
+{% load navactive %}
+
+{% block page_title %}{% translate "Mail Board" %}{% endblock %}
+
+{% block header_nav_brand %}{% translate "Mail Board" %}{% endblock %}
+
+{% block header_nav_user_character_control %}
+    {% comment %}
+        Leave empty to remove user control nav items for this app
+    {% endcomment %}
+{% endblock %}
+
+{% block header_nav_collapse_left %}
+    <ul class="nav navbar-nav">
+        {% if perms.mailboard.board_staff %}
+            <li class="nav-item">
+                <a class="nav-link {% navactive request 'mailboard:dashboard' %}"
+                   href="{% url 'mailboard:dashboard' %}">
+                    <i class="fas fa-tachometer-alt me-1"></i>
+                    {% translate "Dashboard" %}
+                </a>
+            </li>
+        {% endif %}
+
+        {% if perms.mailboard.board_user %}
+            <li class="nav-item">
+                <a class="nav-link {% navactive request 'mailboard:new_ticket' %}"
+                   href="{% url 'mailboard:new_ticket' %}">
+                    <i class="fas fa-plus-circle me-1"></i>
+                    {% translate "New Ticket" %}
+                </a>
+            </li>
+        {% endif %}
+
+        {% if perms.mailboard.board_owner %}
+            <li class="nav-item">
+                <a class="nav-link {% navactive request 'mailboard:add_board_owner' %}"
+                   href="{% url 'mailboard:add_board_owner' %}">
+                    <i class="fas fa-user-plus me-1"></i>
+                    {% translate "Add Board Owner" %}
+                </a>
+            </li>
+        {% endif %}
+    </ul>
+{% endblock header_nav_collapse_left %}
+
+{% block content %}
+    <div>
+    {% block mailboard_content %}{% endblock %}
+    </div>
+{% endblock %}
