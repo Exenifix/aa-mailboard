@@ -35,6 +35,7 @@ from .helpers import (
     truncate,
 )
 from .models import (
+    BlacklistedCharacter,
     BoardOwner,
     DiscordWebhook,
     PendingEveMail,
@@ -113,8 +114,8 @@ def collect_mails() -> None:
         except ESIErrorLimitException as ex:
             logger.warning("ESI error limited, aborting mail collection: %s", ex)
             break
-        except Exception:
-            logger.exception("Failed to collect mails for board owner %s", owner)
+        except Exception as e:
+            logger.exception("Failed to collect mails for board owner %s", owner, exc_info=e)
             failed.append(str(owner))
 
     if failed:
@@ -154,17 +155,19 @@ def _collect_mails_for_owner(owner: BoardOwner) -> None:
         return
 
     owner_character_ids = set(BoardOwner.objects.values_list("character__character_id", flat=True))
+    blacklist = {entry.character_id: entry for entry in BlacklistedCharacter.objects.all()}
     # process oldest first so conversations stay in order
     processed = 0
     for header in sorted(headers, key=lambda h: h.mail_id):
         try:
-            _process_mail(owner, token, header, owner_character_ids)
+            _process_mail(owner, token, header, owner_character_ids, blacklist)
             processed += 1
-        except Exception:
+        except Exception as e:
             logger.exception(
                 "Failed to process mail %s for board owner %s",
                 getattr(header, "mail_id", "<unknown>"),
                 owner,
+                exc_info=e
             )
 
     owner.last_seen_mail_id = max([h.mail_id for h in headers] + [owner.last_seen_mail_id or 0])
@@ -215,13 +218,31 @@ def _fetch_new_mail_headers(
     return headers
 
 
-def _process_mail(owner: BoardOwner, token: Token, header, owner_character_ids: set[int]) -> None:
+def _process_mail(
+    owner: BoardOwner,
+    token: Token,
+    header,
+    owner_character_ids: set[int],
+    blacklist: dict[int, BlacklistedCharacter],
+) -> None:
     """Turn a single incoming mail into a ticket message or a new ticket."""
     sender_id = _mail_header_sender_id(header)
     if not sender_id:
         logger.warning(
             "Skipping mail %s: could not determine sender id",
             getattr(header, "mail_id", "<unknown>"),
+        )
+        return
+    blacklist_entry = blacklist.get(sender_id)
+    if blacklist_entry and blacklist_entry.ignores_mail_at(header.timestamp):
+        # Completely ignore blacklisted senders. The mail still advances
+        # last_seen_mail_id, so it will never be picked up again - even if
+        # the character is later removed from the blacklist, only mails
+        # received after the unblock are processed.
+        logger.info(
+            "Ignoring mail %d from blacklisted character %d",
+            header.mail_id,
+            sender_id,
         )
         return
     if sender_id in owner_character_ids:
@@ -349,8 +370,8 @@ def send_pending_mails() -> None:
                     logger.exception("Failed to send pending mail %d via %s", mail.pk, owner)
                     _record_mail_failure(mail)
                     break
-            except Exception:
-                logger.exception("Board owner %s failed to send mail", owner)
+            except Exception as e:
+                logger.exception("Board owner %s failed to send mail", owner, exc_info=e)
                 failed_owners.append(str(owner))
                 available.pop(0)
         if sent:

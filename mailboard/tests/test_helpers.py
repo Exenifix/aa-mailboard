@@ -56,15 +56,14 @@ class TestMailComposition(TestCase):
         self.assertIn(self.ticket.mail_tag, subject)
         self.assertLessEqual(len(subject), ESI_MAIL_MAX_SUBJECT)
 
-    def test_mail_body_contains_tag_and_respects_limit(self):
-        # the latest message carries the ticket tag, which is echoed back to the
-        # client so a reply can be correlated to this ticket
-        self.ticket.messages.create(
+    def test_mail_body_contains_history_and_respects_limit(self):
+        TicketMessage.objects.create(
+            ticket=self.ticket,
             type=TicketMessage.TYPE_STAFF,
-            content=f"Thanks! See {self.ticket.mail_tag} for reference.",
+            content="y" * 20000,
         )
         body = build_mail_body(self.ticket)
-        self.assertIn(self.ticket.mail_tag, body)
+        self.assertIn("SUPPORT", body)
         self.assertLessEqual(len(body), ESI_MAIL_MAX_BODY)
 
     def test_clean_mail_body(self):

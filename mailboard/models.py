@@ -58,9 +58,11 @@ class Ticket(models.Model):
 
     SOURCE_WEB = "web"
     SOURCE_MAIL = "mail"
+    SOURCE_STAFF = "staff"
     SOURCE_CHOICES = (
         (SOURCE_WEB, "Web"),
         (SOURCE_MAIL, "Eve mail"),
+        (SOURCE_STAFF, "Staff outreach"),
     )
 
     title = models.CharField(max_length=255)
@@ -80,6 +82,10 @@ class Ticket(models.Model):
         related_name="mailboard_tickets",
     )
     is_closed = models.BooleanField(default=False)
+    has_new_messages = models.BooleanField(
+        default=False,
+        help_text="Set when a new client message arrives, cleared when staff responds.",
+    )
     source = models.CharField(max_length=8, choices=SOURCE_CHOICES, default=SOURCE_WEB)
     mail_key = models.CharField(
         max_length=MAIL_KEY_LENGTH,
@@ -101,15 +107,6 @@ class Ticket(models.Model):
     def mail_tag(self) -> str:
         """Subject tag used to correlate eve mails with this ticket."""
         return f"[MB{self.pk}-{self.mail_key}]"
-
-    @property
-    def is_unanswered(self) -> bool:
-        """True if the newest message on the ticket is from the client."""
-        try:
-            newest = self.messages.latest("timestamp")
-        except TicketMessage.DoesNotExist:
-            return False
-        return newest.type == TicketMessage.TYPE_CLIENT
 
     def assign_to(self, user) -> None:
         self.assignee = user
@@ -212,6 +209,44 @@ class PendingEveMail(models.Model):
         return f"Mail to {self.recipient.character_name}: {self.subject[:50]}"
 
 
+class BlacklistedCharacter(models.Model):
+    """A character whose incoming mails are completely ignored.
+
+    Deactivating (or deleting) an entry does not backfill mails that were
+    ignored while it was active: mail collection only processes mails
+    timestamped after ``unblocked_at``.
+    """
+
+    character_id = models.BigIntegerField(unique=True)
+    character_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Informational only; matching is done on the character ID.",
+    )
+    reason = models.TextField(blank=True, default="")
+    active = models.BooleanField(
+        default=True,
+        help_text="Uncheck to unblock. Mails received while blocked stay ignored.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    unblocked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+        help_text="When the character was last unblocked; older mails are ignored.",
+    )
+
+    def __str__(self) -> str:
+        return self.character_name or str(self.character_id)
+
+    def ignores_mail_at(self, mail_timestamp) -> bool:
+        """Whether a mail with this timestamp must be ignored."""
+        if self.active:
+            return True
+        return bool(self.unblocked_at and mail_timestamp <= self.unblocked_at)
+
+
 @receiver(pre_save, sender=BoardOwner)
 def board_owner_pre_save(sender, instance: BoardOwner, **kwargs):
     if not instance.pk:
@@ -223,3 +258,16 @@ def board_owner_pre_save(sender, instance: BoardOwner, **kwargs):
         return
     if not old.enabled and instance.enabled:
         instance.activated_at = timezone.now()
+
+
+@receiver(pre_save, sender=BlacklistedCharacter)
+def blacklisted_character_pre_save(sender, instance: BlacklistedCharacter, **kwargs):
+    if not instance.pk:
+        return
+
+    try:
+        old = BlacklistedCharacter.objects.get(pk=instance.pk)
+    except BlacklistedCharacter.DoesNotExist:
+        return
+    if old.active and not instance.active:
+        instance.unblocked_at = timezone.now()

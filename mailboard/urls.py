@@ -22,4 +22,10 @@ urlpatterns = [
         views.api_ticket_reply,
         name="api_ticket_reply",
     ),
+    path(
+        "api/tickets/<int:ticket_id>/category",
+        views.api_ticket_category,
+        name="api_ticket_category",
+    ),
+    path("api/contact", views.api_contact_character, name="api_contact_character"),
 ]

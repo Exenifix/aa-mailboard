@@ -7,6 +7,7 @@
 {% block mailboard_content %}
     <div id="mailboard-dashboard"
          data-tickets-url="{% url 'mailboard:api_tickets' %}"
+         data-contact-url="{% url 'mailboard:api_contact_character' %}"
          data-csrf="{{ csrf_token }}"
          data-user-id="{{ request.user.pk }}">
         <div class="row">
@@ -43,6 +44,12 @@
                         </div>
                     </div>
                 </div>
+                <div class="d-grid mb-3">
+                    <button class="btn btn-outline-primary" id="mb-btn-contact"
+                            data-bs-toggle="modal" data-bs-target="#mb-contact-modal">
+                        {% translate "Contact character" %}
+                    </button>
+                </div>
                 <div class="list-group" id="mb-ticket-list"></div>
             </div>
             <div class="col-lg-7">
@@ -53,6 +60,21 @@
                     </div>
                     <div class="card-body">
                         <div id="mb-ticket-meta" class="text-muted small mb-3"></div>
+                        <div class="row g-2 align-items-center mb-3">
+                            <div class="col-auto">
+                                <label class="col-form-label col-form-label-sm" for="mb-ticket-category">
+                                    {% translate "Category" %}
+                                </label>
+                            </div>
+                            <div class="col-auto">
+                                <select class="form-select form-select-sm" id="mb-ticket-category">
+                                    <option value="">{% translate "Other" %}</option>
+                                    {% for category in categories %}
+                                        <option value="{{ category.pk }}">{{ category.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
                         <div id="mb-messages" class="mb-3"></div>
                         <div class="mb-2">
                             <textarea class="form-control" id="mb-reply-content" rows="4"
@@ -71,6 +93,50 @@
                 </div>
                 <div id="mb-ticket-placeholder" class="text-muted text-center py-5">
                     {% translate "Select a ticket from the list to view it." %}
+                </div>
+            </div>
+        </div>
+        <div class="modal fade" id="mb-contact-modal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">{% translate "Contact character" %}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label" for="mb-contact-character">
+                                {% translate "Character name or ID" %}
+                            </label>
+                            <input type="text" class="form-control" id="mb-contact-character" maxlength="100">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="mb-contact-title">{% translate "Title" %}</label>
+                            <input type="text" class="form-control" id="mb-contact-title" maxlength="255">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="mb-contact-category">{% translate "Category" %}</label>
+                            <select class="form-select" id="mb-contact-category">
+                                <option value="">{% translate "Other" %}</option>
+                                {% for category in categories %}
+                                    <option value="{{ category.pk }}">{{ category.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="mb-contact-content">{% translate "Message" %}</label>
+                            <textarea class="form-control" id="mb-contact-content" rows="5" maxlength="9000"></textarea>
+                        </div>
+                        <div class="alert alert-danger d-none" id="mb-contact-error"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            {% translate "Cancel" %}
+                        </button>
+                        <button type="button" class="btn btn-primary" id="mb-contact-submit">
+                            {% translate "Send mail" %}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

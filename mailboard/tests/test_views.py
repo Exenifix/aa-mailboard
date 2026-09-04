@@ -196,32 +196,6 @@ class TestDashboardApi(TestCase):
         ids = {t["id"] for t in response.json()["tickets"]}
         self.assertEqual(ids, {closed.pk})
 
-    def test_list_flag_is_unanswered(self):
-        answered = create_ticket_direct(self.creator, title="Answered")
-        staff = answered.messages.first()
-        TicketMessage.objects.create(
-            ticket=answered,
-            type=TicketMessage.TYPE_STAFF,
-            staff=self.staff,
-            content="Thanks",
-            timestamp=staff.timestamp,
-        )
-        self.client.force_login(self.staff)
-        response = self.client.get(reverse("mailboard:api_tickets"), {"all": "1"})
-        by_id = {t["id"]: t for t in response.json()["tickets"]}
-        self.assertTrue(by_id[self.ticket.pk]["is_unanswered"])
-        self.assertFalse(by_id[answered.pk]["is_unanswered"])
-
-    def test_reply_clears_unanswered_flag(self):
-        self.client.force_login(self.staff)
-        self.assertTrue(self.ticket.is_unanswered)
-        response = self._reply(self.ticket, "send", "We are on it")
-        self.assertEqual(response.status_code, 200)
-        self.ticket.refresh_from_db()
-        self.assertFalse(self.ticket.is_unanswered)
-        detail = self.client.get(reverse("mailboard:api_ticket_detail", args=[self.ticket.pk])).json()
-        self.assertFalse(detail["is_unanswered"])
-
     def test_detail_returns_messages(self):
         self.client.force_login(self.staff)
         response = self.client.get(reverse("mailboard:api_ticket_detail", args=[self.ticket.pk]))
@@ -265,17 +239,16 @@ class TestDashboardApi(TestCase):
         self.assertTrue(self.ticket.is_closed)
         self.assertTrue(PendingEveMail.objects.exists())
 
-    def test_close_queues_closed_confirmation_mail(self):
+    def test_close_without_message(self):
         self.client.force_login(self.staff)
         response = self._reply(self.ticket, "close")
         self.assertEqual(response.status_code, 200)
         self.ticket.refresh_from_db()
         self.assertTrue(self.ticket.is_closed)
-        # a plain close (no message) still queues a "closed" confirmation mail
-        self.assertTrue(PendingEveMail.objects.exists())
+        # closing queues a "ticket closed" notification mail
         mail = PendingEveMail.objects.get()
-        self.assertIn(self.ticket.mail_tag, mail.subject)
-        self.assertNotIn("We are on it", mail.content)
+        self.assertEqual(mail.recipient, self.creator)
+        self.assertIn("closed", mail.content)
 
     def test_send_rejects_empty_message(self):
         self.client.force_login(self.staff)

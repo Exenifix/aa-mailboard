@@ -1,6 +1,7 @@
 """Core ticket operations shared by views and tasks."""
 
 from django.db import transaction
+from django.utils import timezone
 
 from allianceauth.services.hooks import get_extension_logger
 
@@ -33,6 +34,7 @@ def create_ticket(*, title, creator_character, source, content, category=None, m
             category=category,
             creator_character=creator_character,
             source=source,
+            has_new_messages=True,
         )
         TicketMessage.objects.create(
             ticket=ticket,
@@ -63,12 +65,13 @@ def add_client_message(ticket: Ticket, content: str, mail_id=None) -> TicketMess
         content=content,
         mail_id=mail_id,
     )
+    ticket.has_new_messages = True
     if ticket.is_closed:
         ticket.is_closed = False
-        ticket.save(update_fields=["is_closed", "updated_at"])
+        ticket.save(update_fields=["is_closed", "has_new_messages", "updated_at"])
         logger.info("Reopened ticket #%d after client reply", ticket.pk)
     else:
-        ticket.save(update_fields=["updated_at"])
+        ticket.save(update_fields=["has_new_messages", "updated_at"])
     return message
 
 
@@ -80,7 +83,8 @@ def add_staff_message(ticket: Ticket, user, content: str) -> TicketMessage:
         staff=user,
         content=content,
     )
-    ticket.save(update_fields=["updated_at"])
+    ticket.has_new_messages = False
+    ticket.save(update_fields=["has_new_messages", "updated_at"])
     PendingEveMail.objects.create(
         recipient=ticket.creator_character,
         subject=build_reply_subject(ticket),
@@ -97,6 +101,33 @@ def queue_confirmation_mail(ticket: Ticket) -> PendingEveMail:
         subject=build_reply_subject(ticket),
         content=truncate(body, ESI_MAIL_MAX_BODY),
     )
+
+
+def create_staff_ticket(*, title, target_character, user, content, category=None) -> Ticket:
+    """Create a ticket by staff reaching out to an arbitrary character.
+
+    The ticket is assigned to the initiating staff member and the message is
+    queued as an eve mail to the target character. From then on the ticket
+    behaves like any other: the character can reply via mail using the
+    subject tag.
+    """
+    with transaction.atomic():
+        ticket = Ticket.objects.create(
+            title=truncate(title, 255),
+            category=category,
+            creator_character=target_character,
+            source=Ticket.SOURCE_STAFF,
+            assignee=user,
+            assigned_at=timezone.now(),
+        )
+        add_staff_message(ticket, user, content)
+    logger.info(
+        "Created staff outreach ticket #%d to %s by %s",
+        ticket.pk,
+        target_character.character_name,
+        user,
+    )
+    return ticket
 
 
 def queue_closed_mail(ticket: Ticket) -> PendingEveMail:

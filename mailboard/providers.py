@@ -16,6 +16,6 @@ esi = ESIClientProvider(
     compatibility_date=MAILBOARD_ESI_COMPATIBILITY_DATE,
     ua_appname="AllianceAuthMailboard",
     ua_version=__version__,
-    ua_url="https://github.com/Exenifix/allianceauth-mailboard",
-    tags=["Mail"],
+    ua_url="https://github.com/Exenifix/aa-mailboard",
+    tags=["Mail", "Universe"],
 )
