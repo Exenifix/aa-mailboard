@@ -371,7 +371,7 @@ def api_contact_character(request: HttpRequest):
     if error:
         return JsonResponse({"error": error}, status=400)
 
-    if BlacklistedCharacter.objects.filter(character_id=character.character_id, active=True).exists():
+    if BlacklistedCharacter.objects.filter(character__character_id=character.character_id, active=True).exists():
         return JsonResponse(
             {"error": f"{character.character_name} is blacklisted; their replies would be ignored."},
             status=400,

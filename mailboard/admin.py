@@ -67,9 +67,9 @@ class BoardOwnerAdmin(admin.ModelAdmin):
 
 @admin.register(BlacklistedCharacter)
 class BlacklistedCharacterAdmin(admin.ModelAdmin):
-    list_display = ("character_id", "character_name", "active", "created_at", "unblocked_at")
+    list_display = ("character", "active", "created_at", "unblocked_at")
     list_filter = ("active",)
-    search_fields = ("character_id", "character_name")
+    search_fields = ("character__character_name",)
     readonly_fields = ("created_at", "unblocked_at")
 
 

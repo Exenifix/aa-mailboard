@@ -58,7 +58,7 @@ class TestBlacklist(TestCase):
         )
 
     def test_active_blacklist_ignores_mail(self, mock_esi, mock_token, mock_notify):
-        BlacklistedCharacter.objects.create(character_id=1101)
+        BlacklistedCharacter.objects.create(character=self.client_char)
         self._setup_esi(
             mock_esi,
             [mail_header(101, 1101, "Buy my stuff")],
@@ -71,7 +71,7 @@ class TestBlacklist(TestCase):
         self.assertEqual(self.owner.last_seen_mail_id, 101)
 
     def test_mails_before_unblock_stay_ignored(self, mock_esi, mock_token, mock_notify):
-        entry = BlacklistedCharacter.objects.create(character_id=1101)
+        entry = BlacklistedCharacter.objects.create(character=self.client_char)
         entry.active = False
         entry.save()
         entry.refresh_from_db()
@@ -90,7 +90,7 @@ class TestBlacklist(TestCase):
         self.assertFalse(TicketMessage.objects.filter(mail_id=101).exists())
 
     def test_reblocked_character_is_ignored_again(self, mock_esi, mock_token, mock_notify):
-        entry = BlacklistedCharacter.objects.create(character_id=1101)
+        entry = BlacklistedCharacter.objects.create(character=self.client_char)
         entry.active = False
         entry.save()
         entry.active = True
@@ -298,7 +298,7 @@ class TestContactCharacter(TestCase):
         self.assertFalse(Ticket.objects.exists())
 
     def test_contact_blacklisted_character_rejected(self, mock_esi):
-        BlacklistedCharacter.objects.create(character_id=self.target.character_id)
+        BlacklistedCharacter.objects.create(character=self.target)
         response = self._contact()
         self.assertEqual(response.status_code, 400)
         self.assertIn("blacklisted", response.json()["error"])

@@ -217,13 +217,7 @@ class BlacklistedCharacter(models.Model):
     timestamped after ``unblocked_at``.
     """
 
-    character_id = models.BigIntegerField(unique=True)
-    character_name = models.CharField(
-        max_length=255,
-        blank=True,
-        default="",
-        help_text="Informational only; matching is done on the character ID.",
-    )
+    character = models.OneToOneField(EveCharacter, on_delete=models.CASCADE, related_name="+")
     reason = models.TextField(blank=True, default="")
     active = models.BooleanField(
         default=True,
@@ -238,7 +232,7 @@ class BlacklistedCharacter(models.Model):
     )
 
     def __str__(self) -> str:
-        return self.character_name or str(self.character_id)
+        return str(self.character)
 
     def ignores_mail_at(self, mail_timestamp) -> bool:
         """Whether a mail with this timestamp must be ignored."""

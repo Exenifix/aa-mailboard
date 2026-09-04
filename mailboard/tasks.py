@@ -155,7 +155,7 @@ def _collect_mails_for_owner(owner: BoardOwner) -> None:
         return
 
     owner_character_ids = set(BoardOwner.objects.values_list("character__character_id", flat=True))
-    blacklist = {entry.character_id: entry for entry in BlacklistedCharacter.objects.all()}
+    blacklist = {entry.character.character_id: entry for entry in BlacklistedCharacter.objects.all()}
     # process oldest first so conversations stay in order
     processed = 0
     for header in sorted(headers, key=lambda h: h.mail_id):
