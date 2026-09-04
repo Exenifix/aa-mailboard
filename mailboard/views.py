@@ -320,7 +320,7 @@ def api_ticket_category(request: HttpRequest, ticket_id: int):
             return JsonResponse({"error": "The selected category does not exist."}, status=400)
 
     ticket.category = category
-    ticket.save(update_fields=["category", "updated_at"])
+    ticket.save(update_fields=["category"])
     logger.info(
         "Ticket #%d category changed to %s by %s",
         ticket.pk,
