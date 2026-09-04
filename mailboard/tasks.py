@@ -360,14 +360,14 @@ def send_pending_mails() -> None:
                 logger.warning("ESI error limited, aborting mail sending: %s", ex)
                 return
             except HTTPClientError as ex:
-                if ex.status_code in (401, 403):
-                    logger.exception("Board owner %s cannot send mails", owner)
+                if ex.status_code in (401, 403, 520):
+                    logger.exception("Board owner %s cannot send mails, code %d", owner, ex.status_code)
                     failed_owners.append(str(owner))
                     available.pop(0)
                 else:
                     # problem with this particular mail (e.g. CSPA charge,
                     # invalid recipient) - skip it and retry later
-                    logger.exception("Failed to send pending mail %d via %s", mail.pk, owner)
+                    logger.exception("Failed to send pending mail %d via %s", mail.pk, owner, exc_info=ex)
                     _record_mail_failure(mail)
                     break
             except Exception as e:
