@@ -37,7 +37,7 @@ character. New tickets can additionally be announced via Discord webhooks.
    ```python
    CELERYBEAT_SCHEDULE["mailboard_collect_mails"] = {
        "task": "mailboard.tasks.collect_mails",
-       "schedule": crontab(minute="*/5"),
+       "schedule": crontab(minute="*"),
    }
    CELERYBEAT_SCHEDULE["mailboard_send_pending_mails"] = {
        "task": "mailboard.tasks.send_pending_mails",

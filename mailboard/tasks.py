@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 import requests
+from allianceauth.services.tasks import QueueOnce
 from celery import shared_task
 from django.conf import settings
 from django.urls import reverse
@@ -98,7 +99,7 @@ def _model_field_names(obj) -> list[str]:
     return [a for a in dir(obj) if not a.startswith("_")]
 
 
-@shared_task
+@shared_task(base=QueueOnce)
 def collect_mails() -> None:
     """Collect new eve mails from all enabled board owners and turn them
     into tickets or ticket messages."""
@@ -301,7 +302,7 @@ def _process_mail(
     )
 
 
-@shared_task
+@shared_task(base=QueueOnce)
 def send_pending_mails() -> None:
     """Send queued eve mails via the first available board owner."""
     pending = list(PendingEveMail.objects.select_related("recipient")[:MAX_MAILS_PER_RUN])
@@ -458,6 +459,7 @@ def notify_ticket_webhooks(ticket_id: int) -> None:
         "username": "Mail Board",
         "embeds": [
             {
+                "url": f"{settings.SITE_URL}{reverse('mailboard:dashboard')}",
                 "title": truncate(
                     f"New ticket #{ticket.pk}: {ticket.title}",
                     DISCORD_EMBED_TITLE_MAX,
