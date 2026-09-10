@@ -24,6 +24,11 @@
     border-left: 3px solid var(--bs-success, #198754);
 }
 
+.mb-message-note {
+    border-left: 3px solid var(--bs-warning, #ffc107);
+    background-color: rgba(255, 193, 7, 0.08);
+}
+
 .mb-new-dot {
     display: inline-block;
     width: 10px;

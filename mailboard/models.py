@@ -36,6 +36,7 @@ class General(models.Model):
             ("board_owner", "Can add a mail receive character (board owner)"),
             ("board_staff", "Can view tickets and respond to them"),
             ("board_user", "Can create tickets via the web interface"),
+            ("mailboard_admin", "Can manage all tickets, locks and assignments"),
         )
 
 
@@ -45,6 +46,15 @@ class TicketCategory(models.Model):
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(null=True, blank=True)
     enabled = models.BooleanField(default=True)
+    keywords = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Comma-separated keywords. Tickets created via eve mail are "
+            "automatically assigned the category whose keywords best match "
+            "the mail subject."
+        ),
+    )
 
     class Meta:
         verbose_name_plural = "ticket categories"
@@ -82,6 +92,13 @@ class Ticket(models.Model):
         related_name="mailboard_tickets",
     )
     is_closed = models.BooleanField(default=False)
+    is_locked = models.BooleanField(
+        default=False,
+        help_text=(
+            "While locked, only the assignee and mailboard admins can "
+            "respond, change the category or close the ticket."
+        ),
+    )
     has_new_messages = models.BooleanField(
         default=False,
         help_text="Set when a new client message arrives, cleared when staff responds.",
@@ -119,9 +136,11 @@ class TicketMessage(models.Model):
 
     TYPE_CLIENT = "client"
     TYPE_STAFF = "staff"
+    TYPE_NOTE = "note"
     TYPE_CHOICES = (
         (TYPE_CLIENT, "Client"),
         (TYPE_STAFF, "Staff"),
+        (TYPE_NOTE, "Staff note"),
     )
 
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="messages")

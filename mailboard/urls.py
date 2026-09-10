@@ -27,5 +27,20 @@ urlpatterns = [
         views.api_ticket_category,
         name="api_ticket_category",
     ),
+    path(
+        "api/tickets/<int:ticket_id>/lock",
+        views.api_ticket_lock,
+        name="api_ticket_lock",
+    ),
+    path(
+        "api/tickets/<int:ticket_id>/unlock",
+        views.api_ticket_unlock,
+        name="api_ticket_unlock",
+    ),
+    path(
+        "api/tickets/<int:ticket_id>/assign",
+        views.api_ticket_assign,
+        name="api_ticket_assign",
+    ),
     path("api/contact", views.api_contact_character, name="api_contact_character"),
 ]

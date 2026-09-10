@@ -103,6 +103,22 @@ def queue_confirmation_mail(ticket: Ticket) -> PendingEveMail:
     )
 
 
+def add_staff_note(ticket: Ticket, user, content: str) -> TicketMessage:
+    """Append an internal staff note to a ticket.
+
+    Notes are visible to staff only: no eve mail is queued, the ticket is
+    not auto-assigned and the new-messages flag is left untouched.
+    """
+    message = TicketMessage.objects.create(
+        ticket=ticket,
+        type=TicketMessage.TYPE_NOTE,
+        staff=user,
+        content=content,
+    )
+    ticket.save(update_fields=["updated_at"])
+    return message
+
+
 def create_staff_ticket(*, title, target_character, user, content, category=None) -> Ticket:
     """Create a ticket by staff reaching out to an arbitrary character.
 

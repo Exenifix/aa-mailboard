@@ -32,6 +32,7 @@ from .helpers import (
     DISCORD_EMBED_TITLE_MAX,
     clean_mail_body,
     find_ticket_for_mail,
+    match_category_for_title,
     strip_mail_tag,
     truncate,
 )
@@ -293,6 +294,7 @@ def _process_mail(
         source=Ticket.SOURCE_MAIL,
         content=content,
         mail_id=header.mail_id,
+        category=match_category_for_title(strip_mail_tag(subject)),
     )
     logger.info(
         "Created ticket #%d from mail %d (sender=%d)",
@@ -429,7 +431,7 @@ def check_assignee_timeouts() -> None:
         return
     deadline = timezone.now() - timezone.timedelta(days=days)
     count = Ticket.objects.filter(is_closed=False, assignee__isnull=False, assigned_at__lt=deadline).update(
-        assignee=None, assigned_at=None
+        assignee=None, assigned_at=None, is_locked=False
     )
     if count:
         logger.info("Released %d ticket(s) from inactive assignees", count)

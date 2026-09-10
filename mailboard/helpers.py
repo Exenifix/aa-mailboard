@@ -9,7 +9,7 @@ from django.utils.html import strip_tags
 from .models import (
     ESI_MAIL_MAX_BODY,
     ESI_MAIL_MAX_SUBJECT,
-    Ticket, TicketMessage,
+    Ticket, TicketCategory, TicketMessage,
 )
 
 # Matches the ticket tag embedded in mail subjects, e.g. "[MB123-a1b2c3d4]"
@@ -75,10 +75,32 @@ REPLY_FOOTER = (
 )
 
 
+def match_category_for_title(title: str) -> TicketCategory | None:
+    """Pick the enabled category whose keywords best match a ticket title.
+
+    Keywords are compared case-insensitively as substrings of the title; the
+    category with the most matching keywords wins (ties broken by name).
+    Returns None when no keyword matches.
+    """
+    title_lower = (title or "").lower()
+    best = None
+    best_hits = 0
+    for category in TicketCategory.objects.filter(enabled=True).exclude(keywords="").order_by("name"):
+        keywords = [keyword.strip().lower() for keyword in category.keywords.split(",") if keyword.strip()]
+        hits = sum(1 for keyword in keywords if keyword in title_lower)
+        if hits > best_hits:
+            best = category
+            best_hits = hits
+    return best
+
+
 def build_mail_body(ticket: Ticket) -> str:
-    """Build an outgoing mail body within the ESI 10,000 character limit."""
+    """Build an outgoing mail body within the ESI 10,000 character limit.
+
+    Staff notes are internal and never included.
+    """
     content = ""
-    messages = ticket.messages.all().order_by("-timestamp")
+    messages = ticket.messages.exclude(type=TicketMessage.TYPE_NOTE).order_by("-timestamp")
     for message in messages:
         content += f"From: <b>{'SUPPORT' if message.type == TicketMessage.TYPE_STAFF else 'YOU'}</b>\n\n"
         content += message.content + "\n\n" + "-" * 20 + "\n"

@@ -1,20 +1,24 @@
 """Views."""
 
 import json
+from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth import get_user
 from django.contrib.auth.decorators import login_required, permission_required
+from django.contrib.auth.models import Permission
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from allianceauth.authentication.models import CharacterOwnership
 from allianceauth.eveonline.models import EveCharacter
 from allianceauth.services.hooks import get_extension_logger
+from app_utils.django import users_with_permission
 from esi.decorators import token_required
 from esi.models import Token
 
@@ -22,7 +26,7 @@ from .app_settings import (
     MAILBOARD_MAX_OPEN_TICKETS,
     MAILBOARD_TICKET_CREATE_COOLDOWN,
 )
-from .core import add_staff_message, create_staff_ticket, create_ticket, queue_closed_mail
+from .core import add_staff_message, add_staff_note, create_staff_ticket, create_ticket, queue_closed_mail
 from .models import (
     ESI_MAIL_MAX_BODY,
     BlacklistedCharacter,
@@ -30,6 +34,7 @@ from .models import (
     Ticket,
     TicketCategory,
     TicketMessage,
+    User,
 )
 from .providers import ESI_MAIL_SCOPES, esi
 
@@ -39,7 +44,40 @@ ANY_PERMISSION = (
     "mailboard.board_owner",
     "mailboard.board_staff",
     "mailboard.board_user",
+    "mailboard.mailboard_admin",
 )
+
+
+def _is_admin(user) -> bool:
+    return user.has_perm("mailboard.mailboard_admin")
+
+
+def _is_staff(user) -> bool:
+    return user.has_perm("mailboard.board_staff") or _is_admin(user)
+
+
+def staff_api_required(view_func):
+    """Restrict a JSON API view to board staff and mailboard admins."""
+
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not _is_staff(request.user):
+            return JsonResponse({"error": "Permission denied."}, status=403)
+        return view_func(request, *args, **kwargs)
+
+    return wrapper
+
+
+def _staff_users():
+    """All users who can work tickets (board staff and mailboard admins)."""
+    permissions = Permission.objects.filter(
+        content_type__app_label="mailboard",
+        codename__in=("board_staff", "mailboard_admin"),
+    )
+    users = User.objects.none()
+    for permission in permissions:
+        users = users | users_with_permission(permission)
+    return users.distinct()
 
 
 @login_required
@@ -47,7 +85,7 @@ def index(request: HttpRequest):
     """Render the landing page."""
     if not any(request.user.has_perm(perm) for perm in ANY_PERMISSION):
         raise PermissionDenied
-    if request.user.has_perm("mailboard.board_staff"):
+    if _is_staff(request.user):
         return redirect("mailboard:dashboard")
     if request.user.has_perm("mailboard.board_user"):
         return redirect("mailboard:new_ticket")
@@ -123,11 +161,24 @@ def _create_ticket_from_form(request: HttpRequest):
 
 
 @login_required
-@permission_required("mailboard.board_staff")
 def dashboard(request: HttpRequest):
     """Render the staff dashboard."""
-    categories = TicketCategory.objects.order_by("name")
-    context = {"page_title": "Dashboard", "categories": categories}
+    if not _is_staff(request.user):
+        raise PermissionDenied
+    is_admin = _is_admin(request.user)
+    context = {
+        "page_title": "Dashboard",
+        "categories": TicketCategory.objects.order_by("name"),
+        "is_admin": is_admin,
+        "staff_users": (
+            sorted(
+                ((user.pk, _user_display(user)) for user in _staff_users()),
+                key=lambda item: item[1].lower(),
+            )
+            if is_admin
+            else []
+        ),
+    }
     return render(request, "mailboard/dashboard.html", context)
 
 
@@ -175,6 +226,7 @@ def _ticket_to_dict(ticket: Ticket) -> dict:
         "assignee": _user_display(ticket.assignee) if ticket.assignee else None,
         "assignee_id": ticket.assignee_id,
         "is_closed": ticket.is_closed,
+        "is_locked": ticket.is_locked,
         "has_new_messages": ticket.has_new_messages,
         "source": ticket.source,
         "created_at": ticket.created_at.isoformat(),
@@ -188,7 +240,7 @@ def _user_display(user) -> str:
 
 
 @login_required
-@permission_required("mailboard.board_staff", raise_exception=True)
+@staff_api_required
 @require_GET
 def api_tickets(request: HttpRequest):
     """List tickets. By default only open, unassigned tickets and open assigned to me tickets are shown."""
@@ -214,7 +266,7 @@ def api_tickets(request: HttpRequest):
 
 
 @login_required
-@permission_required("mailboard.board_staff", raise_exception=True)
+@staff_api_required
 @require_GET
 def api_ticket_detail(request: HttpRequest, ticket_id: int):
     """Return a ticket with its full message history."""
@@ -229,12 +281,12 @@ def api_ticket_detail(request: HttpRequest, ticket_id: int):
         {
             "type": message.type,
             "author": (
-                _user_display(message.staff)
-                if message.type == TicketMessage.TYPE_STAFF and message.staff
-                else ticket.creator_character.character_name
+                ticket.creator_character.character_name
+                if message.type == TicketMessage.TYPE_CLIENT
+                else (_user_display(message.staff) if message.staff else "(unknown staff)")
             ),
             "character_id": (
-                None if message.type == TicketMessage.TYPE_STAFF else ticket.creator_character.character_id
+                ticket.creator_character.character_id if message.type == TicketMessage.TYPE_CLIENT else None
             ),
             "timestamp": message.timestamp.isoformat(),
             "content": message.content,
@@ -244,11 +296,16 @@ def api_ticket_detail(request: HttpRequest, ticket_id: int):
     return JsonResponse(data)
 
 
+def _locked_against(ticket: Ticket, user) -> bool:
+    """Whether the ticket's lock prevents this user from acting on it."""
+    return ticket.is_locked and ticket.assignee_id != user.pk and not _is_admin(user)
+
+
 @login_required
-@permission_required("mailboard.board_staff", raise_exception=True)
+@staff_api_required
 @require_POST
 def api_ticket_reply(request: HttpRequest, ticket_id: int):
-    """Handle the Close / Send / Send and close dashboard actions."""
+    """Handle the Close / Send / Send and close / Note dashboard actions."""
     try:
         ticket = Ticket.objects.select_related("creator_character").get(pk=ticket_id)
     except Ticket.DoesNotExist:
@@ -261,9 +318,9 @@ def api_ticket_reply(request: HttpRequest, ticket_id: int):
     action = payload.get("action")
     content = (payload.get("content") or "").strip()
 
-    if action not in ("send", "send_close", "close"):
+    if action not in ("send", "send_close", "close", "note"):
         return JsonResponse({"error": "Unknown action."}, status=400)
-    if action in ("send", "send_close"):
+    if action in ("send", "send_close", "note"):
         if not content:
             return JsonResponse({"error": "The message cannot be empty."}, status=400)
         if len(content) > ESI_MAIL_MAX_BODY:
@@ -272,9 +329,14 @@ def api_ticket_reply(request: HttpRequest, ticket_id: int):
                 status=400,
             )
 
-    if ticket.assignee and ticket.assignee != request.user:
+    if action == "note":
+        # internal notes are always allowed and never auto-assign
+        add_staff_note(ticket, request.user, content)
+        return JsonResponse(_ticket_to_dict(ticket))
+
+    if _locked_against(ticket, request.user):
         return JsonResponse(
-            {"error": "This ticket is assigned to " f"{_user_display(ticket.assignee)}."},
+            {"error": "This ticket is locked by " f"{_user_display(ticket.assignee)}."},
             status=409,
         )
     if ticket.is_closed and action == "close":
@@ -288,7 +350,8 @@ def api_ticket_reply(request: HttpRequest, ticket_id: int):
     if action in ("send_close", "close"):
         ticket.is_closed = True
         ticket.has_new_messages = False
-        ticket.save(update_fields=["is_closed", "has_new_messages", "updated_at"])
+        ticket.is_locked = False
+        ticket.save(update_fields=["is_closed", "has_new_messages", "is_locked", "updated_at"])
         queue_closed_mail(ticket)
         logger.info("Ticket #%d closed by %s", ticket.pk, request.user)
 
@@ -296,16 +359,104 @@ def api_ticket_reply(request: HttpRequest, ticket_id: int):
 
 
 @login_required
-@permission_required("mailboard.board_staff", raise_exception=True)
+@staff_api_required
+@require_POST
+def api_ticket_lock(request: HttpRequest, ticket_id: int):
+    """Lock a ticket to the requesting staff member (assigning it to them)."""
+    try:
+        ticket = Ticket.objects.select_related("assignee__profile__main_character").get(pk=ticket_id)
+    except Ticket.DoesNotExist:
+        return JsonResponse({"error": "Ticket not found."}, status=404)
+    if ticket.is_closed:
+        return JsonResponse({"error": "A closed ticket cannot be locked."}, status=400)
+    if ticket.is_locked and ticket.assignee_id != request.user.pk and not _is_admin(request.user):
+        return JsonResponse(
+            {"error": "This ticket is already locked by " f"{_user_display(ticket.assignee)}."},
+            status=409,
+        )
+    ticket.is_locked = True
+    ticket.assignee = request.user
+    ticket.assigned_at = timezone.now()
+    ticket.save(update_fields=["is_locked", "assignee", "assigned_at", "updated_at"])
+    logger.info("Ticket #%d locked by %s", ticket.pk, request.user)
+    return JsonResponse(_ticket_to_dict(ticket))
+
+
+@login_required
+@staff_api_required
+@require_POST
+def api_ticket_unlock(request: HttpRequest, ticket_id: int):
+    """Remove the lock from a ticket (assignee or admin only)."""
+    try:
+        ticket = Ticket.objects.select_related("assignee__profile__main_character").get(pk=ticket_id)
+    except Ticket.DoesNotExist:
+        return JsonResponse({"error": "Ticket not found."}, status=404)
+    if not ticket.is_locked:
+        return JsonResponse({"error": "This ticket is not locked."}, status=400)
+    if ticket.assignee_id != request.user.pk and not _is_admin(request.user):
+        return JsonResponse(
+            {"error": "Only " f"{_user_display(ticket.assignee)} or an admin can unlock this ticket."},
+            status=403,
+        )
+    ticket.is_locked = False
+    ticket.save(update_fields=["is_locked", "updated_at"])
+    logger.info("Ticket #%d unlocked by %s", ticket.pk, request.user)
+    return JsonResponse(_ticket_to_dict(ticket))
+
+
+@login_required
+@staff_api_required
+@require_POST
+def api_ticket_assign(request: HttpRequest, ticket_id: int):
+    """Reassign or unassign a ticket (mailboard admins only)."""
+    if not _is_admin(request.user):
+        return JsonResponse({"error": "Only mailboard admins can reassign tickets."}, status=403)
+    try:
+        ticket = Ticket.objects.get(pk=ticket_id)
+    except Ticket.DoesNotExist:
+        return JsonResponse({"error": "Ticket not found."}, status=404)
+    try:
+        payload = json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON payload."}, status=400)
+
+    user_id = payload.get("user_id")
+    if user_id:
+        user = _staff_users().filter(pk=user_id).first()
+        if not user:
+            return JsonResponse({"error": "The selected user is not a staff member."}, status=400)
+        ticket.assignee = user
+        ticket.assigned_at = timezone.now()
+        # an existing lock transfers to the new assignee
+        ticket.save(update_fields=["assignee", "assigned_at", "updated_at"])
+        logger.info("Ticket #%d assigned to %s by %s", ticket.pk, user, request.user)
+    else:
+        ticket.assignee = None
+        ticket.assigned_at = None
+        ticket.is_locked = False
+        ticket.save(update_fields=["assignee", "assigned_at", "is_locked", "updated_at"])
+        logger.info("Ticket #%d unassigned by %s", ticket.pk, request.user)
+    return JsonResponse(_ticket_to_dict(ticket))
+
+
+@login_required
+@staff_api_required
 @require_POST
 def api_ticket_category(request: HttpRequest, ticket_id: int):
     """Change the category of an open ticket."""
     try:
-        ticket = Ticket.objects.select_related("creator_character").get(pk=ticket_id)
+        ticket = Ticket.objects.select_related(
+            "creator_character", "assignee__profile__main_character"
+        ).get(pk=ticket_id)
     except Ticket.DoesNotExist:
         return JsonResponse({"error": "Ticket not found."}, status=404)
     if ticket.is_closed:
         return JsonResponse({"error": "The category of a closed ticket cannot be changed."}, status=400)
+    if _locked_against(ticket, request.user):
+        return JsonResponse(
+            {"error": "This ticket is locked by " f"{_user_display(ticket.assignee)}."},
+            status=409,
+        )
 
     try:
         payload = json.loads(request.body or b"{}")
@@ -331,7 +482,7 @@ def api_ticket_category(request: HttpRequest, ticket_id: int):
 
 
 @login_required
-@permission_required("mailboard.board_staff", raise_exception=True)
+@staff_api_required
 @require_POST
 def api_contact_character(request: HttpRequest):
     """Create a staff outreach ticket to an arbitrary character.

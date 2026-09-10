@@ -14,9 +14,9 @@ from .models import (
 
 @admin.register(TicketCategory)
 class TicketCategoryAdmin(admin.ModelAdmin):
-    list_display = ("name", "enabled")
+    list_display = ("name", "enabled", "keywords")
     list_filter = ("enabled",)
-    search_fields = ("name",)
+    search_fields = ("name", "keywords")
 
 
 class TicketMessageInline(admin.TabularInline):
@@ -35,10 +35,11 @@ class TicketAdmin(admin.ModelAdmin):
         "assignee",
         "source",
         "is_closed",
+        "is_locked",
         "has_new_messages",
         "created_at",
     )
-    list_filter = ("is_closed", "has_new_messages", "source", "category")
+    list_filter = ("is_closed", "is_locked", "has_new_messages", "source", "category")
     search_fields = ("title", "creator_character__character_name")
     readonly_fields = ("mail_key", "created_at", "updated_at")
     inlines = (TicketMessageInline,)

@@ -148,7 +148,7 @@ class TestDashboardApi(TestCase):
         user = create_user(1005, "No Perms")
         self.client.force_login(user)
         response = self.client.get(reverse("mailboard:dashboard"))
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 403)
 
     def test_dashboard_page_renders(self):
         self.client.force_login(self.staff)
@@ -260,8 +260,20 @@ class TestDashboardApi(TestCase):
         response = self._reply(self.ticket, "explode")
         self.assertEqual(response.status_code, 400)
 
-    def test_cannot_touch_ticket_assigned_to_someone_else(self):
+    def test_can_reply_to_ticket_assigned_to_someone_else(self):
+        """By default assignment is soft: any staff member can respond."""
         self.ticket.assign_to(self.other_staff)
+        self.client.force_login(self.staff)
+        response = self._reply(self.ticket, "send", "Helping out")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(self.ticket.messages.filter(type=TicketMessage.TYPE_STAFF).exists())
+        self.ticket.refresh_from_db()
+        # helping out does not steal the assignment
+        self.assertEqual(self.ticket.assignee, self.other_staff)
+
+    def test_cannot_touch_ticket_locked_by_someone_else(self):
+        self.ticket.assign_to(self.other_staff)
+        Ticket.objects.filter(pk=self.ticket.pk).update(is_locked=True)
         self.client.force_login(self.staff)
         response = self._reply(self.ticket, "send", "Mine now")
         self.assertEqual(response.status_code, 409)

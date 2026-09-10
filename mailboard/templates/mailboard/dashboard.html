@@ -9,7 +9,8 @@
          data-tickets-url="{% url 'mailboard:api_tickets' %}"
          data-contact-url="{% url 'mailboard:api_contact_character' %}"
          data-csrf="{{ csrf_token }}"
-         data-user-id="{{ request.user.pk }}">
+         data-user-id="{{ request.user.pk }}"
+         data-is-admin="{{ is_admin|yesno:'1,0' }}">
         <div class="row">
             <div class="col-lg-5">
                 <div class="card card-default mb-3">
@@ -74,7 +75,23 @@
                                     {% endfor %}
                                 </select>
                             </div>
+                            {% if is_admin %}
+                                <div class="col-auto">
+                                    <label class="col-form-label col-form-label-sm" for="mb-ticket-assignee">
+                                        {% translate "Assignee" %}
+                                    </label>
+                                </div>
+                                <div class="col-auto">
+                                    <select class="form-select form-select-sm" id="mb-ticket-assignee">
+                                        <option value="">{% translate "— Unassigned —" %}</option>
+                                        {% for user_id, user_name in staff_users %}
+                                            <option value="{{ user_id }}">{{ user_name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            {% endif %}
                         </div>
+                        <div class="alert alert-warning py-2 d-none" id="mb-lock-notice"></div>
                         <div id="mb-messages" class="mb-3"></div>
                         <div class="mb-2">
                             <textarea class="form-control" id="mb-reply-content" rows="4"
@@ -85,8 +102,12 @@
                             <div class="btn-group">
                                 <button class="btn btn-outline-danger" id="mb-btn-close">{% translate "Close" %}</button>
                                 <button class="btn btn-outline-warning" id="mb-btn-send-close">{% translate "Send and close" %}</button>
+                                <button class="btn btn-outline-danger" id="mb-btn-lock">{% translate "Lock" %}</button>
                             </div>
-                            <button class="btn btn-primary" id="mb-btn-send">{% translate "Send" %}</button>
+                            <div class="btn-group">
+                                <button class="btn btn-outline-info" id="mb-btn-note">{% translate "Add note" %}</button>
+                                <button class="btn btn-primary" id="mb-btn-send">{% translate "Send" %}</button>
+                            </div>
                         </div>
                         <div class="alert alert-danger mt-3 d-none" id="mb-error"></div>
                     </div>

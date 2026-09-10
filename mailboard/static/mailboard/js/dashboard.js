@@ -9,6 +9,9 @@
     const ticketsUrl = root.dataset.ticketsUrl;
     const contactUrl = root.dataset.contactUrl;
     const csrfToken = root.dataset.csrf;
+    const userId = Number(root.dataset.userId);
+    const isAdmin = root.dataset.isAdmin === "1";
+    const POLL_INTERVAL_MS = 10000;
 
     const listEl = document.getElementById("mb-ticket-list");
     const viewEl = document.getElementById("mb-ticket-view");
@@ -24,9 +27,15 @@
     const filterStatus = document.getElementById("mb-filter-status");
     const filterAll = document.getElementById("mb-filter-all");
     const ticketCategoryEl = document.getElementById("mb-ticket-category");
+    const ticketAssigneeEl = document.getElementById("mb-ticket-assignee");
+    const lockNoticeEl = document.getElementById("mb-lock-notice");
+    const lockBtn = document.getElementById("mb-btn-lock");
 
     let currentTicketId = null;
+    let currentTicket = null;
+    let lastTicketJson = null;
     let suppressCategoryChange = false;
+    let suppressAssigneeChange = false;
 
     function esc(text) {
         const div = document.createElement("div");
@@ -58,6 +67,9 @@
         html += ticket.is_closed
             ? '<span class="badge bg-secondary ms-1">Closed</span>'
             : '<span class="badge bg-success ms-1">Open</span>';
+        if (ticket.is_locked) {
+            html += '<span class="badge bg-dark ms-1">&#128274; Locked</span>';
+        }
         if (ticket.assignee) {
             html +=
                 '<span class="badge bg-info ms-1">' + esc(ticket.assignee) + "</span>";
@@ -143,21 +155,65 @@
             .catch(() => showError("Failed to load the ticket."));
     }
 
+    function refreshTicket() {
+        // re-fetch the open ticket and re-render only when it changed
+        fetch(ticketsUrl + "/" + currentTicketId, {
+            headers: { Accept: "application/json" },
+        })
+            .then((response) => (response.ok ? response.json() : null))
+            .then((ticket) => {
+                if (ticket && JSON.stringify(ticket) !== lastTicketJson) {
+                    renderTicket(ticket);
+                }
+            })
+            .catch(() => {});
+    }
+
     function renderTicket(ticket) {
         placeholderEl.classList.add("d-none");
         viewEl.classList.remove("d-none");
         showError("");
+        currentTicket = ticket;
+        lastTicketJson = JSON.stringify(ticket);
         titleEl.textContent = "#" + ticket.id + " " + ticket.title;
         badgesEl.innerHTML = badges(ticket);
         const isClosed = !!ticket.is_closed;
-        replyEl.classList.toggle("d-none", isClosed);
+        // a lock only stops non-owners who are not admins
+        const lockedAgainstMe =
+            !!ticket.is_locked && ticket.assignee_id !== userId && !isAdmin;
         document.getElementById("mb-btn-send").classList.toggle("d-none", isClosed);
         document.getElementById("mb-btn-send-close").classList.toggle("d-none", isClosed);
         document.getElementById("mb-btn-close").classList.toggle("d-none", isClosed);
+        document.getElementById("mb-btn-send").disabled = lockedAgainstMe;
+        document.getElementById("mb-btn-send-close").disabled = lockedAgainstMe;
+        document.getElementById("mb-btn-close").disabled = lockedAgainstMe;
+        lockBtn.classList.toggle("d-none", isClosed);
+        if (ticket.is_locked) {
+            lockBtn.textContent = "Unlock";
+            lockBtn.disabled = lockedAgainstMe;
+        } else {
+            lockBtn.textContent = "Lock";
+            lockBtn.disabled = false;
+        }
+        lockNoticeEl.classList.toggle("d-none", !ticket.is_locked);
+        if (ticket.is_locked) {
+            lockNoticeEl.textContent = lockedAgainstMe
+                ? "🔒 Locked by " +
+                  (ticket.assignee || "?") +
+                  " - only they or an admin can respond, change the category or close. You can still add notes."
+                : "🔒 This ticket is locked to " +
+                  (ticket.assignee_id === userId ? "you" : ticket.assignee || "?") +
+                  ".";
+        }
         suppressCategoryChange = true;
         ticketCategoryEl.value = ticket.category_id ? String(ticket.category_id) : "";
         suppressCategoryChange = false;
-        ticketCategoryEl.disabled = isClosed;
+        ticketCategoryEl.disabled = isClosed || lockedAgainstMe;
+        if (ticketAssigneeEl) {
+            suppressAssigneeChange = true;
+            ticketAssigneeEl.value = ticket.assignee_id ? String(ticket.assignee_id) : "";
+            suppressAssigneeChange = false;
+        }
         metaEl.innerHTML =
             "Created by " +
             portrait(ticket.creator_character.id) +
@@ -169,14 +225,19 @@
         messagesEl.innerHTML = (ticket.messages || [])
             .map((message) => {
                 const isStaff = message.type === "staff";
+                const isNote = message.type === "note";
                 return (
                     '<div class="mb-message card mb-2 ' +
-                    (isStaff ? "mb-message-staff" : "mb-message-client") +
+                    (isNote
+                        ? "mb-message-note"
+                        : isStaff
+                          ? "mb-message-staff"
+                          : "mb-message-client") +
                     '"><div class="card-body py-2">' +
                     '<div class="d-flex justify-content-between small text-muted mb-1"><span>' +
                     (message.character_id ? portrait(message.character_id) : "") +
                     esc(message.author) +
-                    (isStaff ? " (staff)" : "") +
+                    (isStaff ? " (staff)" : isNote ? " (staff note - not sent to client)" : "") +
                     "</span><span>" +
                     new Date(message.timestamp).toLocaleString() +
                     "</span></div>" +
@@ -191,6 +252,12 @@
 
     function submitAction(action) {
         if (!currentTicketId) {
+            return;
+        }
+        if (
+            (action === "close" || action === "send_close") &&
+            !window.confirm("Close ticket #" + currentTicketId + "?")
+        ) {
             return;
         }
         showError("");
@@ -244,6 +311,55 @@
                 openTicket(currentTicketId);
             })
             .catch(() => showError("Failed to change the category."));
+    }
+
+    function toggleLock() {
+        if (!currentTicketId || !currentTicket) {
+            return;
+        }
+        showError("");
+        const endpoint = currentTicket.is_locked ? "/unlock" : "/lock";
+        fetch(ticketsUrl + "/" + currentTicketId + endpoint, {
+            method: "POST",
+            headers: { "X-CSRFToken": csrfToken },
+        })
+            .then((response) =>
+                response.json().then((data) => ({ ok: response.ok, data: data }))
+            )
+            .then((result) => {
+                if (!result.ok) {
+                    showError(result.data.error || "Request failed.");
+                }
+                openTicket(currentTicketId);
+            })
+            .catch(() => showError("Request failed."));
+    }
+
+    function changeAssignee() {
+        if (!currentTicketId || suppressAssigneeChange) {
+            return;
+        }
+        showError("");
+        fetch(ticketsUrl + "/" + currentTicketId + "/assign", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": csrfToken,
+            },
+            body: JSON.stringify({
+                user_id: ticketAssigneeEl.value || null,
+            }),
+        })
+            .then((response) =>
+                response.json().then((data) => ({ ok: response.ok, data: data }))
+            )
+            .then((result) => {
+                if (!result.ok) {
+                    showError(result.data.error || "Failed to change the assignee.");
+                }
+                openTicket(currentTicketId);
+            })
+            .catch(() => showError("Failed to change the assignee."));
     }
 
     function showContactError(message) {
@@ -304,12 +420,30 @@
         .getElementById("mb-btn-close")
         .addEventListener("click", () => submitAction("close"));
     document
+        .getElementById("mb-btn-note")
+        .addEventListener("click", () => submitAction("note"));
+    document
         .getElementById("mb-contact-submit")
         .addEventListener("click", submitContact);
+    lockBtn.addEventListener("click", toggleLock);
     ticketCategoryEl.addEventListener("change", changeCategory);
+    if (ticketAssigneeEl) {
+        ticketAssigneeEl.addEventListener("change", changeAssignee);
+    }
     [filterCategory, filterStatus, filterAll].forEach((el) =>
         el.addEventListener("change", loadTickets)
     );
+
+    // real-time updates: poll while the tab is visible
+    setInterval(() => {
+        if (document.hidden) {
+            return;
+        }
+        loadTickets();
+        if (currentTicketId) {
+            refreshTicket();
+        }
+    }, POLL_INTERVAL_MS);
 
     loadTickets();
 })();
