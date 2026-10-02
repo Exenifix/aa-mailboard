@@ -267,12 +267,12 @@ def _process_mail(
         mail_id=header.mail_id,
         token=token,
     ).result()
-    content = clean_mail_body(mail.body or "")
+    body = mail.body or ""
     subject = header.subject or ""
 
     ticket = find_ticket_for_mail(subject, sender_id)
     if ticket:
-        m = add_client_message(ticket, content, mail_id=header.mail_id)
+        m = add_client_message(ticket, clean_mail_body(body, split=True), mail_id=header.mail_id)
         logger.info("Added mail %d to ticket #%d", header.mail_id, ticket.pk)
         if ticket.assignee:
             notify_throttled(
@@ -292,7 +292,7 @@ def _process_mail(
         title=strip_mail_tag(subject) or "(no subject)",
         creator_character=sender,
         source=Ticket.SOURCE_MAIL,
-        content=content,
+        content=clean_mail_body(body, split=False),
         mail_id=header.mail_id,
         category=match_category_for_title(strip_mail_tag(subject)),
     )

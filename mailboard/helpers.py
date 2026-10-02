@@ -27,9 +27,10 @@ def truncate(text: str, limit: int, ellipsis_: str = "…") -> str:
     return text[: limit - len(ellipsis_)] + ellipsis_
 
 
-def clean_mail_body(body: str) -> str:
+def clean_mail_body(body: str, split: bool = True) -> str:
     """Convert an eve mail HTML body into plain text."""
-    body = body.split("-------", maxsplit=1)[0]
+    if split:
+        body = body.split("-------", maxsplit=1)[0]
     text = re.sub(r"<br\s*/?>", "\n", body or "", flags=re.IGNORECASE)
     return html.unescape(strip_tags(text)).strip()
 
