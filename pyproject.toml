@@ -1,6 +1,6 @@
 [project]
 name = "mailboard"
-version = "0.2.1"
+version = "0.2.2"
 description = ""
 authors = [
     {name = "Exenifix"}
@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12,<3.15"
 dependencies = [
     "allianceauth (>=5.2.0,<6.0.0)",
-    "django-esi (>=9.10.0,<10.0.0)",
+    "django-esi>=9.10.0",
     "requests (>=2.34.2,<3.0.0)",
     "allianceauth-app-utils (>=1.33.2,<2.0.0)"
 ]
