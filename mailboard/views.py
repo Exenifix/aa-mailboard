@@ -47,6 +47,11 @@ ANY_PERMISSION = (
     "mailboard.mailboard_admin",
 )
 
+STAFF_PERMISSION = (
+    "mailboard.board_owner",
+    "mailboard.board_staff",
+)
+
 
 def _is_admin(user) -> bool:
     return user.has_perm("mailboard.mailboard_admin")

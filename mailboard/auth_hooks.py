@@ -5,7 +5,7 @@ from allianceauth.services.hooks import MenuItemHook, UrlHook
 
 from . import urls
 from .models import Ticket
-from .views import ANY_PERMISSION
+from .views import ANY_PERMISSION, STAFF_PERMISSION
 
 
 class MailboardMenuItem(MenuItemHook):
@@ -22,9 +22,10 @@ class MailboardMenuItem(MenuItemHook):
         )
 
     def render(self, request):
-        app_count = Ticket.objects.filter(is_closed=False, assignee=None).count()
-        self.count = app_count if app_count > 0 else None
         if any(request.user.has_perm(perm) for perm in ANY_PERMISSION):
+            if any(request.user.has_perm(perm) for perm in STAFF_PERMISSION):
+                app_count = Ticket.objects.filter(is_closed=False, assignee=None).count()
+                self.count = app_count if app_count > 0 else None
             return MenuItemHook.render(self, request)
         return ""
 
